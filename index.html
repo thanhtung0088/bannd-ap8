@@ -594,6 +594,37 @@
   .security-hotline .hl-item .hl-lbl{font-size:12px;color:#cfe0f5;}
   @media(max-width:900px){ .security-grid{grid-template-columns:1fr 1fr;} }
   @media(max-width:600px){ .security-grid{grid-template-columns:1fr;} }
+
+  /* ============ THĂM DÒ Ý KIẾN ============ */
+  .poll-widget{
+    display:grid;grid-template-columns:1fr 1fr;border-radius:var(--radius);overflow:hidden;
+    box-shadow:var(--shadow);margin-top:22px;
+  }
+  .poll-left{background:#cfe6fb;padding:28px 26px;}
+  .poll-left h3{margin:0 0 12px;font-size:15.5px;color:var(--navy-900);text-align:center;letter-spacing:0.3px;}
+  .poll-left .poll-question{text-align:center;font-size:13.5px;color:var(--navy-800);margin-bottom:16px;}
+  .poll-options{display:flex;flex-wrap:wrap;gap:14px 22px;justify-content:center;margin-bottom:20px;}
+  .poll-options label{display:flex;align-items:center;gap:7px;font-size:13px;color:var(--ink);cursor:pointer;font-weight:600;}
+  .poll-options input[type="radio"]{width:16px;height:16px;accent-color:var(--navy-700);cursor:pointer;}
+  .poll-suggest label{display:block;text-align:center;font-weight:700;color:var(--navy-800);margin-bottom:8px;font-size:13.5px;}
+  .poll-suggest input{width:100%;background:#fff;}
+  .poll-submit{display:flex;justify-content:center;margin-top:16px;}
+  .btn-poll-submit{
+    background:var(--navy-800);color:#fff;border:none;padding:10px 34px;border-radius:8px;
+    font-size:13.5px;font-weight:700;cursor:pointer;transition:background .15s;
+  }
+  .btn-poll-submit:hover{background:var(--navy-700);}
+  .poll-right{background:linear-gradient(135deg,var(--navy-800),var(--navy-900));color:#fff;padding:28px 26px;}
+  .poll-right h3{margin:0 0 22px;font-size:15.5px;text-align:center;letter-spacing:0.6px;}
+  .poll-bar-item{margin-bottom:20px;}
+  .poll-bar-item:last-child{margin-bottom:0;}
+  .poll-bar-item .pb-label{font-size:13px;font-weight:700;margin-bottom:7px;color:#fff;}
+  .poll-bar-bg{background:rgba(255,255,255,0.25);border-radius:6px;height:10px;overflow:hidden;}
+  .poll-bar-fill{background:var(--gold);height:100%;border-radius:6px;transition:width .6s ease;}
+  .poll-bar-meta{display:flex;justify-content:flex-end;gap:16px;font-size:12px;margin-top:5px;color:#cfe0f5;}
+  @media(max-width:760px){
+    .poll-widget{grid-template-columns:1fr;}
+  }
 </style>
 </head>
 <body>
@@ -746,6 +777,30 @@
       🔒 Bạn cần đăng nhập với vai trò Bí thư hoặc Phó Bí thư để dán ảnh và đưa tin. Người dân chỉ có thể xem.
     </div>
     <div class="gallery-grid" id="galleryGrid"></div>
+
+    <!-- ============ THĂM DÒ Ý KIẾN ============ -->
+    <div class="poll-widget">
+      <div class="poll-left">
+        <h3>Chia sẻ suy nghĩ của bạn với chúng tôi</h3>
+        <div class="poll-question">Trang thông tin có hữu ích với bạn không?</div>
+        <div class="poll-options" id="pollOptions">
+          <label><input type="radio" name="pollChoice" value="co"> Có</label>
+          <label><input type="radio" name="pollChoice" value="mucdo"> Mức độ đáp ứng chưa cao</label>
+          <label><input type="radio" name="pollChoice" value="khong"> Không</label>
+        </div>
+        <div class="poll-suggest">
+          <label>Đề xuất cải tiến của bạn</label>
+          <input type="text" id="pollSuggest" placeholder="VD: Bổ sung thêm biểu mẫu, tin tức chi tiết hơn...">
+        </div>
+        <div class="poll-submit">
+          <button class="btn-poll-submit" onclick="submitPoll()">Gửi</button>
+        </div>
+      </div>
+      <div class="poll-right">
+        <h3>KẾT QUẢ BÌNH CHỌN</h3>
+        <div id="pollResults"></div>
+      </div>
+    </div>
   </div>
 
   <!-- ============ GIỚI THIỆU ============ -->
@@ -2469,11 +2524,82 @@ function initVisitStats(){
 }
 
 /* ============================================================
+   THĂM DÒ Ý KIẾN — bình chọn mức độ hữu ích của trang
+   ============================================================ */
+const POLL_KEYS = ['co','mucdo','khong'];
+const POLL_LABELS = { co:'Có', mucdo:'Mức độ đáp ứng chưa cao', khong:'Không' };
+const POLL_LOCAL_KEY = 'ap8_poll_v1';
+const POLL_VOTED_KEY = 'ap8_poll_voted_v1';
+let pollData = { co:483, mucdo:289, khong:195 };
+
+function renderPollResults(){
+  const el = document.getElementById('pollResults');
+  if(!el) return;
+  const total = POLL_KEYS.reduce((s,k)=>s+(pollData[k]||0), 0) || 1;
+  el.innerHTML = POLL_KEYS.map(k=>{
+    const val = pollData[k] || 0;
+    const pct = Math.round((val/total)*100);
+    return `<div class="poll-bar-item">
+      <div class="pb-label">${POLL_LABELS[k]}</div>
+      <div class="poll-bar-bg"><div class="poll-bar-fill" style="width:${pct}%;"></div></div>
+      <div class="poll-bar-meta"><span>${fmtNum(val)}</span><span>${pct}%</span></div>
+    </div>`;
+  }).join('');
+}
+
+function initPoll(){
+  if(cloudEnabled){
+    db.collection('meta').doc('poll').onSnapshot(doc=>{
+      if(doc.exists){
+        const d = doc.data();
+        pollData = { co:d.co||0, mucdo:d.mucdo||0, khong:d.khong||0 };
+      }
+      renderPollResults();
+    }, ()=>{ renderPollResults(); });
+  } else {
+    pollData = loadLocal(POLL_LOCAL_KEY, pollData);
+    renderPollResults();
+  }
+}
+
+async function submitPoll(){
+  const selected = document.querySelector('input[name="pollChoice"]:checked');
+  if(!selected){ showToast('Vui lòng chọn một phương án trước khi gửi.'); return; }
+  if(localStorage.getItem(POLL_VOTED_KEY)){
+    showToast('Bạn đã bình chọn rồi. Cảm ơn ý kiến của bạn!');
+    return;
+  }
+  const choice = selected.value;
+  const suggestion = document.getElementById('pollSuggest').value.trim();
+
+  try{
+    if(cloudEnabled){
+      const pollRef = db.collection('meta').doc('poll');
+      await pollRef.set({ [choice]: firebase.firestore.FieldValue.increment(1) }, { merge:true });
+      if(suggestion){
+        await db.collection('pollFeedback').add({ choice, suggestion, createdAt:Date.now() });
+      }
+    } else {
+      pollData[choice] = (pollData[choice]||0) + 1;
+      saveLocal(POLL_LOCAL_KEY, pollData);
+      renderPollResults();
+    }
+    localStorage.setItem(POLL_VOTED_KEY, '1');
+    document.getElementById('pollSuggest').value = '';
+    showToast('Cảm ơn bạn đã đóng góp ý kiến!');
+  } catch(err){
+    console.error(err);
+    showToast('Không thể gửi bình chọn. Vui lòng thử lại sau.');
+  }
+}
+
+/* ============================================================
    INIT
    ============================================================ */
 updateSyncBadge();
 renderAuthUI();
 initVisitStats();
+initPoll();
 </script>
 </body>
 </html>
